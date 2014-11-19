@@ -234,7 +234,9 @@
 
       var setItemsFn = groupByExp ? updateGroups : setPlainItems;
 
-      ctrl.parserResult = RepeatParser.parse(repeatAttr);
+      if (angular.isUndefined(ctrl.parserResult)) {
+        ctrl.parserResult = RepeatParser.parse(repeatAttr);
+      }
 
       ctrl.isGrouped = !!groupByExp;
       ctrl.itemProperty = ctrl.parserResult.itemName;
@@ -303,12 +305,12 @@
       }
     };
 
-    ctrl.setActiveItem = function(item) {
-      ctrl.activeIndex = ctrl.items.indexOf(item);
+    ctrl.setActiveItem = function(index) {
+      ctrl.activeIndex = index;
     };
 
-    ctrl.isActive = function(itemScope) {
-      var isActive = ctrl.open && ctrl.items.indexOf(itemScope[ctrl.itemProperty]) === ctrl.activeIndex;
+    ctrl.isActive = function(index) {
+      var isActive = ctrl.open && index === ctrl.activeIndex;
 
       if (isActive && !angular.isUndefined(ctrl.onHighlightCallback)) {
         itemScope.$eval(ctrl.onHighlightCallback);
@@ -894,35 +896,37 @@
 
         if (!tAttrs.repeat) throw uiSelectMinErr('repeat', "Expected 'repeat' expression.");
 
+        var groupByExp = tAttrs.groupBy;
+
+        if(groupByExp) {
+          var groups = tElement.querySelectorAll('.ui-select-choices-group');
+          if (groups.length !== 1) throw uiSelectMinErr('rows', "Expected 1 .ui-select-choices-group but got '{0}'.", groups.length);
+          groups.attr('ng-repeat', RepeatParser.getGroupNgRepeatExpression());
+        }
+
+        var choices = tElement.querySelectorAll('.ui-select-choices-row');
+        if (choices.length !== 1) {
+          throw uiSelectMinErr('rows', "Expected 1 .ui-select-choices-row but got '{0}'.", choices.length);
+        }
+
+        var parserResult = RepeatParser.parse(tAttrs.repeat);
+
+        choices.attr('ng-repeat', RepeatParser.getNgRepeatExpression(parserResult.itemName, '$select.items', parserResult.trackByExp, groupByExp));
+
+        var rowsInner = tElement.querySelectorAll('.ui-select-choices-row-inner');
+
+        if (rowsInner.length !== 1) throw uiSelectMinErr('rows', "Expected 1 .ui-select-choices-row-inner but got '{0}'.", rowsInner.length);
+        rowsInner.attr('uis-transclude-append', '') //Adding uisTranscludeAppend directive to row element after choices element has ngRepeat
+          .attr('ng-if', '$select.open') //Prevent unnecessary watches when dropdown is closed
+          // .attr('ng-mouseenter', '$select.setActiveItem('+$select.parserResult.itemName +')')
+          .attr('ng-click', '$select.select(' + parserResult.itemName + ',false,$event)');
+
         return function link(scope, element, attrs, $select, transcludeFn) {
-          
-          // var repeat = RepeatParser.parse(attrs.repeat);
-          var groupByExp = attrs.groupBy;
 
           $select.parseRepeatAttr(attrs.repeat, groupByExp); //Result ready at $select.parserResult
 
           $select.disableChoiceExpression = attrs.uiDisableChoice;
           $select.onHighlightCallback = attrs.onHighlight;
-
-          if(groupByExp) {
-            var groups = element.querySelectorAll('.ui-select-choices-group');
-            if (groups.length !== 1) throw uiSelectMinErr('rows', "Expected 1 .ui-select-choices-group but got '{0}'.", groups.length);
-            groups.attr('ng-repeat', RepeatParser.getGroupNgRepeatExpression());
-          }
-
-          var choices = element.querySelectorAll('.ui-select-choices-row');
-          if (choices.length !== 1) {
-            throw uiSelectMinErr('rows', "Expected 1 .ui-select-choices-row but got '{0}'.", choices.length);
-          }
-
-          choices.attr('ng-repeat', RepeatParser.getNgRepeatExpression($select.parserResult.itemName, '$select.items', $select.parserResult.trackByExp, groupByExp))
-              .attr('ng-if', '$select.open') //Prevent unnecessary watches when dropdown is closed
-              .attr('ng-mouseenter', '$select.setActiveItem('+$select.parserResult.itemName +')')
-              .attr('ng-click', '$select.select(' + $select.parserResult.itemName + ',false,$event)');
-
-          var rowsInner = element.querySelectorAll('.ui-select-choices-row-inner');
-          if (rowsInner.length !== 1) throw uiSelectMinErr('rows', "Expected 1 .ui-select-choices-row-inner but got '{0}'.", rowsInner.length);
-          rowsInner.attr('uis-transclude-append', ''); //Adding uisTranscludeAppend directive to row element after choices element has ngRepeat
 
           $compile(element, transcludeFn)(scope); //Passing current transcludeFn to be able to append elements correctly from uisTranscludeAppend
 
